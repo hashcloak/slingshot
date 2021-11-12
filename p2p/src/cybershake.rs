@@ -31,10 +31,12 @@
 //! * Add custom header to be sent in the first encrypted frame:
 //!   users can put the protocol version there, certificate info etc.
 
+use aead::generic_array::GenericArray;
+use aead::AeadInPlace;
+use aead::NewAead;
+use aes_siv::{Aes128SivAead, Key, Nonce};
 use byteorder::{ByteOrder, LittleEndian};
 use core::marker::Unpin;
-use aead::generic_array::GenericArray;
-use aes_siv::{Aes128SivAead, Key, Nonce};
 use rand_core::{CryptoRng, RngCore};
 
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
@@ -238,7 +240,7 @@ impl<W: AsyncWrite + Unpin> Outgoing<W> {
 
         let ad = encode_u64le(self.seq);
 
-        let tag = Aes128SivAead::new(GenericArray::clone_from_slice(&key))
+        let tag = Aes128SivAead::new(&GenericArray::clone_from_slice(&key))
             .encrypt_in_place_detached(&[&ad], &mut self.buf[PT_OFFSET..])
             .expect("never fails because we have just one header");
 
@@ -336,7 +338,7 @@ impl<R: AsyncRead + Unpin> Incoming<R> {
         let ad = encode_u64le(seq);
 
         let siv_tag = GenericArray::clone_from_slice(&self.buf[..16]);
-        Aes128SivAead::new(GenericArray::clone_from_slice(&key))
+        Aes128SivAead::new(&GenericArray::clone_from_slice(&key))
             .decrypt_in_place_detached(&[&ad], &mut self.buf[16..ciphertext_length], &siv_tag)
             .map_err(|_| {
                 io::Error::new(
